@@ -1,7 +1,6 @@
 package inflect
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -501,25 +500,29 @@ func (rs *Ruleset) Dasherize(word string) string {
 }
 
 // "1031" -> "1031st"
-func (rs *Ruleset) Ordinalize(str string) string {
-	number, err := strconv.Atoi(str)
-	if err != nil {
-		return str
-	}
-	switch abs(number) % 100 {
-	case 11, 12, 13:
-		return fmt.Sprintf("%dth", number)
-	default:
-		switch abs(number) % 10 {
-		case 1:
-			return fmt.Sprintf("%dst", number)
-		case 2:
-			return fmt.Sprintf("%dnd", number)
-		case 3:
-			return fmt.Sprintf("%drd", number)
+func (rs *Ruleset) Ordinalize(str string) (ret string) {
+	if number, e := strconv.Atoi(str); e != nil {
+		ret = str
+	} else {
+		var ext string
+		switch abs(number) % 100 {
+		case 11, 12, 13:
+			ext = "th"
+		default:
+			switch abs(number) % 10 {
+			case 1:
+				ext = "st"
+			case 2:
+				ext = "nd"
+			case 3:
+				ext = "rd"
+			default:
+				ext = "th"
+			}
 		}
+		ret = str + ext
 	}
-	return fmt.Sprintf("%dth", number)
+	return ret
 }
 
 /////////////////////////////////////////
