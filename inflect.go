@@ -1,3 +1,4 @@
+//
 package inflect
 
 import (
@@ -5,235 +6,223 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
-// used by rulesets
+// Rule for transforming a single word.
 type Rule struct {
-	suffix      string
-	replacement string
-	exact       bool
+	match, sub string
+	exact      bool
 }
 
-// a Ruleset is the config of pluralization rules
-// you can extend the rules with the Add* methods
+// Ruleset of multiple word transformations..
 type Ruleset struct {
-	uncountables   map[string]bool
-	plurals        []*Rule
-	singulars      []*Rule
-	humans         []*Rule
-	acronyms       []*Rule
-	acronymMatcher *regexp.Regexp
+	plurals, singulars, humans, acronyms, uncountables []Rule
 }
 
-// create a blank ruleset. Unless you are going to
-// build your own rules from scratch you probably
-// won't need this and can just use the defaultRuleset
-// via the global inflect.* methods
-func NewRuleset() *Ruleset {
-	rs := new(Ruleset)
-	rs.uncountables = make(map[string]bool)
-	rs.plurals = make([]*Rule, 0)
-	rs.singulars = make([]*Rule, 0)
-	rs.humans = make([]*Rule, 0)
-	rs.acronyms = make([]*Rule, 0)
-	return rs
+// Rules - a default set of transformations.
+// initialized at startup with AddDefaultRules() automatically.
+var Rules Ruleset
+
+func init() {
+	AddDefaultRules(&Rules)
 }
 
-// create a new ruleset and load it with the default
-// set of common English pluralization rules
-func NewDefaultRuleset() *Ruleset {
-	rs := NewRuleset()
-	rs.AddPlural("s", "s")
-	rs.AddPlural("testis", "testes")
-	rs.AddPlural("axis", "axes")
-	rs.AddPlural("octopus", "octopi")
-	rs.AddPlural("virus", "viri")
-	rs.AddPlural("octopi", "octopi")
-	rs.AddPlural("viri", "viri")
-	rs.AddPlural("alias", "aliases")
-	rs.AddPlural("status", "statuses")
-	rs.AddPlural("bus", "buses")
-	rs.AddPlural("buffalo", "buffaloes")
-	rs.AddPlural("tomato", "tomatoes")
-	rs.AddPlural("tum", "ta")
-	rs.AddPlural("ium", "ia")
-	rs.AddPlural("ta", "ta")
-	rs.AddPlural("ia", "ia")
-	rs.AddPlural("sis", "ses")
-	rs.AddPlural("lf", "lves")
-	rs.AddPlural("rf", "rves")
-	rs.AddPlural("afe", "aves")
-	rs.AddPlural("bfe", "bves")
-	rs.AddPlural("cfe", "cves")
-	rs.AddPlural("dfe", "dves")
-	rs.AddPlural("efe", "eves")
-	rs.AddPlural("gfe", "gves")
-	rs.AddPlural("hfe", "hves")
-	rs.AddPlural("ife", "ives")
-	rs.AddPlural("jfe", "jves")
-	rs.AddPlural("kfe", "kves")
-	rs.AddPlural("lfe", "lves")
-	rs.AddPlural("mfe", "mves")
-	rs.AddPlural("nfe", "nves")
-	rs.AddPlural("ofe", "oves")
-	rs.AddPlural("pfe", "pves")
-	rs.AddPlural("qfe", "qves")
-	rs.AddPlural("rfe", "rves")
-	rs.AddPlural("sfe", "sves")
-	rs.AddPlural("tfe", "tves")
-	rs.AddPlural("ufe", "uves")
-	rs.AddPlural("vfe", "vves")
-	rs.AddPlural("wfe", "wves")
-	rs.AddPlural("xfe", "xves")
-	rs.AddPlural("yfe", "yves")
-	rs.AddPlural("zfe", "zves")
-	rs.AddPlural("hive", "hives")
-	rs.AddPlural("quy", "quies")
-	rs.AddPlural("by", "bies")
-	rs.AddPlural("cy", "cies")
-	rs.AddPlural("dy", "dies")
-	rs.AddPlural("fy", "fies")
-	rs.AddPlural("gy", "gies")
-	rs.AddPlural("hy", "hies")
-	rs.AddPlural("jy", "jies")
-	rs.AddPlural("ky", "kies")
-	rs.AddPlural("ly", "lies")
-	rs.AddPlural("my", "mies")
-	rs.AddPlural("ny", "nies")
-	rs.AddPlural("py", "pies")
-	rs.AddPlural("qy", "qies")
-	rs.AddPlural("ry", "ries")
-	rs.AddPlural("sy", "sies")
-	rs.AddPlural("ty", "ties")
-	rs.AddPlural("vy", "vies")
-	rs.AddPlural("wy", "wies")
-	rs.AddPlural("xy", "xies")
-	rs.AddPlural("zy", "zies")
-	rs.AddPlural("x", "xes")
-	rs.AddPlural("ch", "ches")
-	rs.AddPlural("ss", "sses")
-	rs.AddPlural("sh", "shes")
-	rs.AddPlural("matrix", "matrices")
-	rs.AddPlural("vertix", "vertices")
-	rs.AddPlural("indix", "indices")
-	rs.AddPlural("matrex", "matrices")
-	rs.AddPlural("vertex", "vertices")
-	rs.AddPlural("index", "indices")
-	rs.AddPlural("mouse", "mice")
-	rs.AddPlural("louse", "lice")
-	rs.AddPlural("mice", "mice")
-	rs.AddPlural("lice", "lice")
-	rs.AddPluralExact("ox", "oxen", true)
-	rs.AddPluralExact("oxen", "oxen", true)
-	rs.AddPluralExact("quiz", "quizzes", true)
-	rs.AddSingular("s", "")
-	rs.AddSingular("news", "news")
-	rs.AddSingular("ta", "tum")
-	rs.AddSingular("ia", "ium")
-	rs.AddSingular("analyses", "analysis")
-	rs.AddSingular("bases", "basis")
-	rs.AddSingular("diagnoses", "diagnosis")
-	rs.AddSingular("parentheses", "parenthesis")
-	rs.AddSingular("prognoses", "prognosis")
-	rs.AddSingular("synopses", "synopsis")
-	rs.AddSingular("theses", "thesis")
-	rs.AddSingular("analyses", "analysis")
-	rs.AddSingular("aves", "afe")
-	rs.AddSingular("bves", "bfe")
-	rs.AddSingular("cves", "cfe")
-	rs.AddSingular("dves", "dfe")
-	rs.AddSingular("eves", "efe")
-	rs.AddSingular("gves", "gfe")
-	rs.AddSingular("hves", "hfe")
-	rs.AddSingular("ives", "ife")
-	rs.AddSingular("jves", "jfe")
-	rs.AddSingular("kves", "kfe")
-	rs.AddSingular("lves", "lfe")
-	rs.AddSingular("mves", "mfe")
-	rs.AddSingular("nves", "nfe")
-	rs.AddSingular("oves", "ofe")
-	rs.AddSingular("pves", "pfe")
-	rs.AddSingular("qves", "qfe")
-	rs.AddSingular("rves", "rfe")
-	rs.AddSingular("sves", "sfe")
-	rs.AddSingular("tves", "tfe")
-	rs.AddSingular("uves", "ufe")
-	rs.AddSingular("vves", "vfe")
-	rs.AddSingular("wves", "wfe")
-	rs.AddSingular("xves", "xfe")
-	rs.AddSingular("yves", "yfe")
-	rs.AddSingular("zves", "zfe")
-	rs.AddSingular("hives", "hive")
-	rs.AddSingular("tives", "tive")
-	rs.AddSingular("lves", "lf")
-	rs.AddSingular("rves", "rf")
-	rs.AddSingular("quies", "quy")
-	rs.AddSingular("bies", "by")
-	rs.AddSingular("cies", "cy")
-	rs.AddSingular("dies", "dy")
-	rs.AddSingular("fies", "fy")
-	rs.AddSingular("gies", "gy")
-	rs.AddSingular("hies", "hy")
-	rs.AddSingular("jies", "jy")
-	rs.AddSingular("kies", "ky")
-	rs.AddSingular("lies", "ly")
-	rs.AddSingular("mies", "my")
-	rs.AddSingular("nies", "ny")
-	rs.AddSingular("pies", "py")
-	rs.AddSingular("qies", "qy")
-	rs.AddSingular("ries", "ry")
-	rs.AddSingular("sies", "sy")
-	rs.AddSingular("ties", "ty")
-	rs.AddSingular("vies", "vy")
-	rs.AddSingular("wies", "wy")
-	rs.AddSingular("xies", "xy")
-	rs.AddSingular("zies", "zy")
-	rs.AddSingular("series", "series")
-	rs.AddSingular("movies", "movie")
-	rs.AddSingular("xes", "x")
-	rs.AddSingular("ches", "ch")
-	rs.AddSingular("sses", "ss")
-	rs.AddSingular("shes", "sh")
-	rs.AddSingular("mice", "mouse")
-	rs.AddSingular("lice", "louse")
-	rs.AddSingular("buses", "bus")
-	rs.AddSingular("oes", "o")
-	rs.AddSingular("shoes", "shoe")
-	rs.AddSingular("crises", "crisis")
-	rs.AddSingular("axes", "axis")
-	rs.AddSingular("testes", "testis")
-	rs.AddSingular("octopi", "octopus")
-	rs.AddSingular("viri", "virus")
-	rs.AddSingular("statuses", "status")
-	rs.AddSingular("aliases", "alias")
-	rs.AddSingularExact("oxen", "ox", true)
-	rs.AddSingular("vertices", "vertex")
-	rs.AddSingular("indices", "index")
-	rs.AddSingular("matrices", "matrix")
-	rs.AddSingularExact("quizzes", "quiz", true)
-	rs.AddSingular("databases", "database")
+// AddDefaultRules of common English pluralization to the passed rules.
+// Returns the same ruleset for easier statement chaining
+func AddDefaultRules(rs *Ruleset) *Ruleset {
+	rs.plurals = append(rs.plurals, []Rule{
+		{match: "s", sub: "s"},
+		{match: "testis", sub: "testes"},
+		{match: "axis", sub: "axes"},
+		{match: "octopus", sub: "octopi"},
+		{match: "virus", sub: "viri"},
+		{match: "octopi", sub: "octopi"},
+		{match: "viri", sub: "viri"},
+		{match: "alias", sub: "aliases"},
+		{match: "status", sub: "statuses"},
+		{match: "bus", sub: "buses"},
+		{match: "buffalo", sub: "buffaloes"},
+		{match: "tomato", sub: "tomatoes"},
+		{match: "tum", sub: "ta"},
+		{match: "ium", sub: "ia"},
+		{match: "ta", sub: "ta"},
+		{match: "ia", sub: "ia"},
+		{match: "sis", sub: "ses"},
+		{match: "lf", sub: "lves"},
+		{match: "rf", sub: "rves"},
+		{match: "afe", sub: "aves"},
+		{match: "bfe", sub: "bves"},
+		{match: "cfe", sub: "cves"},
+		{match: "dfe", sub: "dves"},
+		{match: "efe", sub: "eves"},
+		{match: "gfe", sub: "gves"},
+		{match: "hfe", sub: "hves"},
+		{match: "ife", sub: "ives"},
+		{match: "jfe", sub: "jves"},
+		{match: "kfe", sub: "kves"},
+		{match: "lfe", sub: "lves"},
+		{match: "mfe", sub: "mves"},
+		{match: "nfe", sub: "nves"},
+		{match: "ofe", sub: "oves"},
+		{match: "pfe", sub: "pves"},
+		{match: "qfe", sub: "qves"},
+		{match: "rfe", sub: "rves"},
+		{match: "sfe", sub: "sves"},
+		{match: "tfe", sub: "tves"},
+		{match: "ufe", sub: "uves"},
+		{match: "vfe", sub: "vves"},
+		{match: "wfe", sub: "wves"},
+		{match: "xfe", sub: "xves"},
+		{match: "yfe", sub: "yves"},
+		{match: "zfe", sub: "zves"},
+		{match: "hive", sub: "hives"},
+		{match: "quy", sub: "quies"},
+		{match: "by", sub: "bies"},
+		{match: "cy", sub: "cies"},
+		{match: "dy", sub: "dies"},
+		{match: "fy", sub: "fies"},
+		{match: "gy", sub: "gies"},
+		{match: "hy", sub: "hies"},
+		{match: "jy", sub: "jies"},
+		{match: "ky", sub: "kies"},
+		{match: "ly", sub: "lies"},
+		{match: "my", sub: "mies"},
+		{match: "ny", sub: "nies"},
+		{match: "py", sub: "pies"},
+		{match: "qy", sub: "qies"},
+		{match: "ry", sub: "ries"},
+		{match: "sy", sub: "sies"},
+		{match: "ty", sub: "ties"},
+		{match: "vy", sub: "vies"},
+		{match: "wy", sub: "wies"},
+		{match: "xy", sub: "xies"},
+		{match: "zy", sub: "zies"},
+		{match: "x", sub: "xes"},
+		{match: "ch", sub: "ches"},
+		{match: "ss", sub: "sses"},
+		{match: "sh", sub: "shes"},
+		{match: "matrix", sub: "matrices"},
+		{match: "vertix", sub: "vertices"},
+		{match: "indix", sub: "indices"},
+		{match: "matrex", sub: "matrices"},
+		{match: "vertex", sub: "vertices"},
+		{match: "index", sub: "indices"},
+		{match: "mouse", sub: "mice"},
+		{match: "louse", sub: "lice"},
+		{match: "mice", sub: "mice"},
+		{match: "lice", sub: "lice"},
+		{match: "ox", sub: "oxen", exact: true},
+		{match: "oxen", sub: "oxen", exact: true},
+		{match: "quiz", sub: "quizzes", exact: true},
+	}...)
+	rs.singulars = append(rs.singulars, []Rule{
+		{match: "s", sub: ""},
+		{match: "news", sub: "news"},
+		{match: "ta", sub: "tum"},
+		{match: "ia", sub: "ium"},
+		{match: "analyses", sub: "analysis"},
+		{match: "bases", sub: "basis"},
+		{match: "diagnoses", sub: "diagnosis"},
+		{match: "parentheses", sub: "parenthesis"},
+		{match: "prognoses", sub: "prognosis"},
+		{match: "synopses", sub: "synopsis"},
+		{match: "theses", sub: "thesis"},
+		{match: "analyses", sub: "analysis"},
+		{match: "aves", sub: "afe"},
+		{match: "bves", sub: "bfe"},
+		{match: "cves", sub: "cfe"},
+		{match: "dves", sub: "dfe"},
+		{match: "eves", sub: "efe"},
+		{match: "gves", sub: "gfe"},
+		{match: "hves", sub: "hfe"},
+		{match: "ives", sub: "ife"},
+		{match: "jves", sub: "jfe"},
+		{match: "kves", sub: "kfe"},
+		{match: "lves", sub: "lfe"},
+		{match: "mves", sub: "mfe"},
+		{match: "nves", sub: "nfe"},
+		{match: "oves", sub: "ofe"},
+		{match: "pves", sub: "pfe"},
+		{match: "qves", sub: "qfe"},
+		{match: "rves", sub: "rfe"},
+		{match: "sves", sub: "sfe"},
+		{match: "tves", sub: "tfe"},
+		{match: "uves", sub: "ufe"},
+		{match: "vves", sub: "vfe"},
+		{match: "wves", sub: "wfe"},
+		{match: "xves", sub: "xfe"},
+		{match: "yves", sub: "yfe"},
+		{match: "zves", sub: "zfe"},
+		{match: "hives", sub: "hive"},
+		{match: "tives", sub: "tive"},
+		{match: "lves", sub: "lf"},
+		{match: "rves", sub: "rf"},
+		{match: "quies", sub: "quy"},
+		{match: "bies", sub: "by"},
+		{match: "cies", sub: "cy"},
+		{match: "dies", sub: "dy"},
+		{match: "fies", sub: "fy"},
+		{match: "gies", sub: "gy"},
+		{match: "hies", sub: "hy"},
+		{match: "jies", sub: "jy"},
+		{match: "kies", sub: "ky"},
+		{match: "lies", sub: "ly"},
+		{match: "mies", sub: "my"},
+		{match: "nies", sub: "ny"},
+		{match: "pies", sub: "py"},
+		{match: "qies", sub: "qy"},
+		{match: "ries", sub: "ry"},
+		{match: "sies", sub: "sy"},
+		{match: "ties", sub: "ty"},
+		{match: "vies", sub: "vy"},
+		{match: "wies", sub: "wy"},
+		{match: "xies", sub: "xy"},
+		{match: "zies", sub: "zy"},
+		{match: "series", sub: "series"},
+		{match: "movies", sub: "movie"},
+		{match: "xes", sub: "x"},
+		{match: "ches", sub: "ch"},
+		{match: "sses", sub: "ss"},
+		{match: "shes", sub: "sh"},
+		{match: "mice", sub: "mouse"},
+		{match: "lice", sub: "louse"},
+		{match: "buses", sub: "bus"},
+		{match: "oes", sub: "o"},
+		{match: "shoes", sub: "shoe"},
+		{match: "crises", sub: "crisis"},
+		{match: "axes", sub: "axis"},
+		{match: "testes", sub: "testis"},
+		{match: "octopi", sub: "octopus"},
+		{match: "viri", sub: "virus"},
+		{match: "statuses", sub: "status"},
+		{match: "aliases", sub: "alias"},
+		{match: "oxen", sub: "ox", exact: true},
+		{match: "vertices", sub: "vertex"},
+		{match: "indices", sub: "index"},
+		{match: "matrices", sub: "matrix"},
+		{match: "quizzes", sub: "quiz", exact: true},
+		{match: "databases", sub: "database"},
+	}...)
 	rs.AddIrregular("person", "people")
 	rs.AddIrregular("man", "men")
 	rs.AddIrregular("child", "children")
 	rs.AddIrregular("sex", "sexes")
 	rs.AddIrregular("move", "moves")
 	rs.AddIrregular("zombie", "zombies")
-	rs.AddUncountable("equipment")
-	rs.AddUncountable("information")
-	rs.AddUncountable("rice")
-	rs.AddUncountable("money")
-	rs.AddUncountable("species")
-	rs.AddUncountable("series")
-	rs.AddUncountable("fish")
-	rs.AddUncountable("sheep")
-	rs.AddUncountable("jeans")
-	rs.AddUncountable("police")
-	return rs
-}
+	rs.uncountables = append(rs.uncountables, []Rule{
+		{exact: true, match: "equipment"},
+		{exact: true, match: "fish"},
+		{exact: true, match: "information"},
+		{exact: true, match: "jeans"},
+		{exact: true, match: "money"},
+		{exact: true, match: "police"},
+		{exact: true, match: "rice"},
+		{exact: true, match: "series"},
+		{exact: true, match: "sheep"},
+		{exact: true, match: "species"},
+	}...)
 
-func (rs *Ruleset) Uncountables() map[string]bool {
-	return rs.uncountables
+	return rs
 }
 
 // add a pluralization rule
@@ -243,15 +232,11 @@ func (rs *Ruleset) AddPlural(suffix, replacement string) {
 
 // add a pluralization rule with full string match
 func (rs *Ruleset) AddPluralExact(suffix, replacement string, exact bool) {
-	// remove uncountable
-	delete(rs.uncountables, suffix)
-	// create rule
-	r := new(Rule)
-	r.suffix = suffix
-	r.replacement = replacement
-	r.exact = exact
-	// prepend
-	rs.plurals = append([]*Rule{r}, rs.plurals...)
+	rs.plurals = append(rs.plurals, Rule{
+		match: suffix,
+		sub:   replacement,
+		exact: exact,
+	})
 }
 
 // add a singular rule
@@ -259,33 +244,25 @@ func (rs *Ruleset) AddSingular(suffix, replacement string) {
 	rs.AddSingularExact(suffix, replacement, false)
 }
 
-// same as AddSingular but you can set `exact` to force
-// a full string match
+// same as AddSingular but you can set `exact` to force  a full string match
 func (rs *Ruleset) AddSingularExact(suffix, replacement string, exact bool) {
-	// remove from uncountable
-	delete(rs.uncountables, suffix)
-	// create rule
-	r := new(Rule)
-	r.suffix = suffix
-	r.replacement = replacement
-	r.exact = exact
-	rs.singulars = append([]*Rule{r}, rs.singulars...)
+	rs.singulars = append(rs.singulars, Rule{
+		match: suffix,
+		sub:   replacement,
+		exact: exact,
+	})
 }
 
-// Human rules are applied by humanize to show more friendly
-// versions of words
+// Human rules are applied by humanize to show more friendly versions of words
 func (rs *Ruleset) AddHuman(suffix, replacement string) {
-	r := new(Rule)
-	r.suffix = suffix
-	r.replacement = replacement
-	rs.humans = append([]*Rule{r}, rs.humans...)
+	rs.humans = append(rs.humans, Rule{
+		match: suffix,
+		sub:   replacement,
+	})
 }
 
-// Add any inconsistant pluralizing/sinularizing rules
-// to the set here.
+// Add any inconsistent plural/singular rules to the set here.
 func (rs *Ruleset) AddIrregular(singular, plural string) {
-	delete(rs.uncountables, singular)
-	delete(rs.uncountables, plural)
 	rs.AddPlural(singular, plural)
 	rs.AddPlural(plural, plural)
 	rs.AddSingular(plural, singular)
@@ -295,69 +272,74 @@ func (rs *Ruleset) AddIrregular(singular, plural string) {
 // to prevent Underscored words of things like "HTML" coming out
 // as "h_t_m_l"
 func (rs *Ruleset) AddAcronym(word string) {
-	r := new(Rule)
-	r.suffix = word
-	r.replacement = rs.Titleize(strings.ToLower(word))
-	rs.acronyms = append(rs.acronyms, r)
+	rs.acronyms = append(rs.acronyms, Rule{
+		match: word,
+		sub:   rs.Titleize(strings.ToLower(word)),
+	})
 }
 
 // add a word to this ruleset that has the same singular and plural form
 // for example: "rice"
 func (rs *Ruleset) AddUncountable(word string) {
-	rs.uncountables[strings.ToLower(word)] = true
+	rs.uncountables = append(rs.uncountables, Rule{match: word, exact: true})
 }
 
+// handle multiple words by using the last one
 func (rs *Ruleset) isUncountable(word string) bool {
-	// handle multiple words by using the last one
 	words := strings.Split(word, " ")
-	if _, exists := rs.uncountables[strings.ToLower(words[len(words)-1])]; exists {
-		return true
-	}
-	return false
+	last := strings.ToLower(words[len(words)-1])
+	_, exact := find(rs.uncountables, last)
+	return exact
 }
 
 // returns the plural form of a singular word
-func (rs *Ruleset) Pluralize(word string) string {
-	if len(word) == 0 {
-		return word
+func (rs *Ruleset) Pluralize(word string) (ret string) {
+	if len(word) > 0 {
+		if p, exact := find(rs.plurals, word); exact {
+			ret = p
+		} else if rs.isUncountable(word) {
+			ret = word
+		} else if len(p) > 0 {
+			ret = p // inexact match
+		} else {
+			ret = word + "s"
+		}
 	}
-	if rs.isUncountable(word) {
-		return word
-	}
-	for _, rule := range rs.plurals {
-		if rule.exact {
-			if word == rule.suffix {
-				return rule.replacement
+	return
+}
+
+func find(rules []Rule, word string) (ret string, exact bool) {
+	for i := len(rules) - 1; i >= 0; i-- {
+		if rule := rules[i]; rule.exact {
+			if word == rule.match {
+				ret = rule.sub
+				exact = true
+				break
 			}
 		} else {
-			if strings.HasSuffix(word, rule.suffix) {
-				return replaceLast(word, rule.suffix, rule.replacement)
+			if trimmed := strings.TrimSuffix(word, rule.match); len(trimmed) < len(word) {
+				ret = trimmed + rule.sub
+				break
 			}
 		}
 	}
-	return word + "s"
+	return
 }
 
 // returns the singular form of a plural word
-func (rs *Ruleset) Singularize(word string) string {
-	if len(word) == 0 {
-		return word
-	}
-	if rs.isUncountable(word) {
-		return word
-	}
-	for _, rule := range rs.singulars {
-		if rule.exact {
-			if word == rule.suffix {
-				return rule.replacement
-			}
+func (rs *Ruleset) Singularize(word string) (ret string) {
+	if len(word) > 0 {
+		if p, exact := find(rs.singulars, word); exact {
+			ret = p
+		} else if rs.isUncountable(word) {
+			ret = word
+		} else if len(p) > 0 {
+			ret = p // inexact match
 		} else {
-			if strings.HasSuffix(word, rule.suffix) {
-				return replaceLast(word, rule.suffix, rule.replacement)
-			}
+			ret = word
 		}
 	}
-	return word
+	return
 }
 
 // uppercase first character
@@ -367,48 +349,49 @@ func (rs *Ruleset) Capitalize(word string) string {
 
 // "dino_party" -> "DinoParty"
 func (rs *Ruleset) Camelize(word string) string {
-	words := splitAtCaseChangeWithTitlecase(word)
-	return strings.Join(words, "")
+	return splitAtCaseChange(word, "", true)
 }
 
 // same as Camelcase but with first letter downcased
 func (rs *Ruleset) CamelizeDownFirst(word string) string {
-	word = Camelize(word)
+	word = rs.Camelize(word)
 	return strings.ToLower(word[:1]) + word[1:]
 }
 
-// Captitilize every word in sentance "hello there" -> "Hello There"
+// Capitalize every word in sentance "hello there" -> "Hello There"
 func (rs *Ruleset) Titleize(word string) string {
-	words := splitAtCaseChangeWithTitlecase(word)
-	return strings.Join(words, " ")
+	return splitAtCaseChange(word, " ", true)
 }
 
 func (rs *Ruleset) safeCaseAcronyms(word string) string {
 	// convert an acroymn like HTML into Html
+	// forward searches not sure why.
 	for _, rule := range rs.acronyms {
-		word = strings.Replace(word, rule.suffix, rule.replacement, -1)
+		word = strings.Replace(word, rule.match, rule.sub, -1)
 	}
 	return word
 }
 
 func (rs *Ruleset) seperatedWords(word, sep string) string {
 	word = rs.safeCaseAcronyms(word)
-	words := splitAtCaseChange(word)
-	return strings.Join(words, sep)
+	return splitAtCaseChange(word, sep, false)
 }
 
-// lowercase underscore version "BigBen" -> "big_ben"
+// Underscore lowercase version "BigBen" -> "big_ben"
 func (rs *Ruleset) Underscore(word string) string {
 	return rs.seperatedWords(word, "_")
 }
 
-// First letter of sentance captitilized
+// First letter of sentence capitalized
 // Uses custom friendly replacements via AddHuman()
 func (rs *Ruleset) Humanize(word string) string {
-	word = replaceLast(word, "_id", "") // strip foreign key kinds
+	if trimmed := strings.TrimSuffix(word, "_id"); len(trimmed) < len(word) {
+		word = trimmed // strip foreign key kinds
+	}
 	// replace and strings in humans list
-	for _, rule := range rs.humans {
-		word = strings.Replace(word, rule.suffix, rule.replacement, -1)
+	for i := len(rs.humans) - 1; i >= 0; i-- {
+		rule := rs.humans[i]
+		word = strings.Replace(word, rule.match, rule.sub, -1)
 	}
 	sentance := rs.seperatedWords(word, " ")
 	return strings.ToUpper(sentance[:1]) + sentance[1:]
@@ -433,7 +416,7 @@ var notUrlSafe *regexp.Regexp = regexp.MustCompile(`[^\w\d\-_ ]`)
 
 // param safe dasherized names like "my-param"
 func (rs *Ruleset) Parameterize(word string) string {
-	return ParameterizeJoin(word, "-")
+	return rs.ParameterizeJoin(word, "-")
 }
 
 // param safe dasherized names with custom seperator
@@ -452,36 +435,44 @@ func (rs *Ruleset) ParameterizeJoin(word, sep string) string {
 	return word
 }
 
-var lookalikes map[string]*regexp.Regexp = map[string]*regexp.Regexp{
-	"A":  regexp.MustCompile(`À|Á|Â|Ã|Ä|Å`),
-	"AE": regexp.MustCompile(`Æ`),
-	"C":  regexp.MustCompile(`Ç`),
-	"E":  regexp.MustCompile(`È|É|Ê|Ë`),
-	"G":  regexp.MustCompile(`Ğ`),
-	"I":  regexp.MustCompile(`Ì|Í|Î|Ï|İ`),
-	"N":  regexp.MustCompile(`Ñ`),
-	"O":  regexp.MustCompile(`Ò|Ó|Ô|Õ|Ö|Ø`),
-	"S":  regexp.MustCompile(`Ş`),
-	"U":  regexp.MustCompile(`Ù|Ú|Û|Ü`),
-	"Y":  regexp.MustCompile(`Ý`),
-	"ss": regexp.MustCompile(`ß`),
-	"a":  regexp.MustCompile(`à|á|â|ã|ä|å`),
-	"ae": regexp.MustCompile(`æ`),
-	"c":  regexp.MustCompile(`ç`),
-	"e":  regexp.MustCompile(`è|é|ê|ë`),
-	"g":  regexp.MustCompile(`ğ`),
-	"i":  regexp.MustCompile(`ì|í|î|ï|ı`),
-	"n":  regexp.MustCompile(`ñ`),
-	"o":  regexp.MustCompile(`ò|ó|ô|õ|ö|ø`),
-	"s":  regexp.MustCompile(`ş`),
-	"u":  regexp.MustCompile(`ù|ú|û|ü|ũ|ū|ŭ|ů|ű|ų`),
-	"y":  regexp.MustCompile(`ý|ÿ`),
+type lookalike struct {
+	sub   string
+	match *regexp.Regexp
 }
+
+var lookalikes []lookalike
 
 // transforms latin characters like é -> e
 func (rs *Ruleset) Asciify(word string) string {
-	for repl, regex := range lookalikes {
-		word = regex.ReplaceAllString(word, repl)
+	if len(lookalikes) == 0 {
+		lookalikes = []lookalike{
+			{"A", regexp.MustCompile(`À|Á|Â|Ã|Ä|Å`)},
+			{"AE", regexp.MustCompile(`Æ`)},
+			{"C", regexp.MustCompile(`Ç`)},
+			{"E", regexp.MustCompile(`È|É|Ê|Ë`)},
+			{"G", regexp.MustCompile(`Ğ`)},
+			{"I", regexp.MustCompile(`Ì|Í|Î|Ï|İ`)},
+			{"N", regexp.MustCompile(`Ñ`)},
+			{"O", regexp.MustCompile(`Ò|Ó|Ô|Õ|Ö|Ø`)},
+			{"S", regexp.MustCompile(`Ş`)},
+			{"U", regexp.MustCompile(`Ù|Ú|Û|Ü`)},
+			{"Y", regexp.MustCompile(`Ý`)},
+			{"ss", regexp.MustCompile(`ß`)},
+			{"a", regexp.MustCompile(`à|á|â|ã|ä|å`)},
+			{"ae", regexp.MustCompile(`æ`)},
+			{"c", regexp.MustCompile(`ç`)},
+			{"e", regexp.MustCompile(`è|é|ê|ë`)},
+			{"g", regexp.MustCompile(`ğ`)},
+			{"i", regexp.MustCompile(`ì|í|î|ï|ı`)},
+			{"n", regexp.MustCompile(`ñ`)},
+			{"o", regexp.MustCompile(`ò|ó|ô|õ|ö|ø`)},
+			{"s", regexp.MustCompile(`ş`)},
+			{"u", regexp.MustCompile(`ù|ú|û|ü|ũ|ū|ŭ|ů|ű|ų`)},
+			{"y", regexp.MustCompile(`ý|ÿ`)},
+		}
+	}
+	for _, el := range lookalikes {
+		word = el.match.ReplaceAllString(word, el.sub)
 	}
 	return word
 }
@@ -525,192 +516,142 @@ func (rs *Ruleset) Ordinalize(str string) (ret string) {
 	return ret
 }
 
-/////////////////////////////////////////
-// the default global ruleset
-//////////////////////////////////////////
-
-var defaultRuleset *Ruleset
-
-func init() {
-	defaultRuleset = NewDefaultRuleset()
-}
-
-func Uncountables() map[string]bool {
-	return defaultRuleset.Uncountables()
-}
-
 func AddPlural(suffix, replacement string) {
-	defaultRuleset.AddPlural(suffix, replacement)
+	Rules.AddPlural(suffix, replacement)
 }
 
 func AddSingular(suffix, replacement string) {
-	defaultRuleset.AddSingular(suffix, replacement)
+	Rules.AddSingular(suffix, replacement)
 }
 
 func AddHuman(suffix, replacement string) {
-	defaultRuleset.AddHuman(suffix, replacement)
+	Rules.AddHuman(suffix, replacement)
 }
 
 func AddIrregular(singular, plural string) {
-	defaultRuleset.AddIrregular(singular, plural)
+	Rules.AddIrregular(singular, plural)
 }
 
 func AddAcronym(word string) {
-	defaultRuleset.AddAcronym(word)
+	Rules.AddAcronym(word)
 }
 
 func AddUncountable(word string) {
-	defaultRuleset.AddUncountable(word)
+	Rules.AddUncountable(word)
 }
 
 func Pluralize(word string) string {
-	return defaultRuleset.Pluralize(word)
+	return Rules.Pluralize(word)
 }
 
 func Singularize(word string) string {
-	return defaultRuleset.Singularize(word)
+	return Rules.Singularize(word)
 }
 
 func Capitalize(word string) string {
-	return defaultRuleset.Capitalize(word)
+	return Rules.Capitalize(word)
 }
 
 func Camelize(word string) string {
-	return defaultRuleset.Camelize(word)
+	return Rules.Camelize(word)
 }
 
 func CamelizeDownFirst(word string) string {
-	return defaultRuleset.CamelizeDownFirst(word)
+	return Rules.CamelizeDownFirst(word)
 }
 
 func Titleize(word string) string {
-	return defaultRuleset.Titleize(word)
+	return Rules.Titleize(word)
 }
 
 func Underscore(word string) string {
-	return defaultRuleset.Underscore(word)
+	return Rules.Underscore(word)
 }
 
 func Humanize(word string) string {
-	return defaultRuleset.Humanize(word)
+	return Rules.Humanize(word)
 }
 
 func ForeignKey(word string) string {
-	return defaultRuleset.ForeignKey(word)
+	return Rules.ForeignKey(word)
 }
 
 func ForeignKeyCondensed(word string) string {
-	return defaultRuleset.ForeignKeyCondensed(word)
+	return Rules.ForeignKeyCondensed(word)
 }
 
 func Tableize(word string) string {
-	return defaultRuleset.Tableize(word)
+	return Rules.Tableize(word)
 }
 
 func Parameterize(word string) string {
-	return defaultRuleset.Parameterize(word)
+	return Rules.Parameterize(word)
 }
 
 func ParameterizeJoin(word, sep string) string {
-	return defaultRuleset.ParameterizeJoin(word, sep)
+	return Rules.ParameterizeJoin(word, sep)
 }
 
 func Typeify(word string) string {
-	return defaultRuleset.Typeify(word)
+	return Rules.Typeify(word)
 }
 
 func Dasherize(word string) string {
-	return defaultRuleset.Dasherize(word)
+	return Rules.Dasherize(word)
 }
 
 func Ordinalize(word string) string {
-	return defaultRuleset.Ordinalize(word)
+	return Rules.Ordinalize(word)
 }
 
 func Asciify(word string) string {
-	return defaultRuleset.Asciify(word)
+	return Rules.Asciify(word)
 }
 
 // helper funcs
 
-func reverse(s string) string {
-	o := make([]rune, utf8.RuneCountInString(s))
-	i := len(o)
-	for _, c := range s {
-		i--
-		o[i] = c
-	}
-	return string(o)
-}
-
 func isSpacerChar(c rune) bool {
-	switch {
-	case c == rune("_"[0]):
-		return true
-	case c == rune(" "[0]):
-		return true
-	case c == rune(":"[0]):
-		return true
-	case c == rune("-"[0]):
-		return true
-	}
-	return false
+	return c == '_' ||
+		c == ' ' ||
+		c == ':' ||
+		c == '-'
 }
 
-func splitAtCaseChange(s string) []string {
-	words := make([]string, 0)
-	word := make([]rune, 0)
+func splitAtCaseChange(s, sep string, allowCaps bool) string {
+	var word, words strings.Builder
 	for _, c := range s {
 		spacer := isSpacerChar(c)
-		if len(word) > 0 {
-			if unicode.IsUpper(c) || spacer {
-				words = append(words, string(word))
-				word = make([]rune, 0)
+		lower := unicode.ToLower(c)
+		if word.Len() > 0 {
+			if spacer || lower != c {
+				if words.Len() > 0 {
+					words.WriteString(sep)
+				}
+				words.WriteString(word.String())
+				word.Reset()
 			}
 		}
 		if !spacer {
-			word = append(word, unicode.ToLower(c))
-		}
-	}
-	words = append(words, string(word))
-	return words
-}
-
-func splitAtCaseChangeWithTitlecase(s string) []string {
-	words := make([]string, 0)
-	word := make([]rune, 0)
-	for _, c := range s {
-		spacer := isSpacerChar(c)
-		if len(word) > 0 {
-			if unicode.IsUpper(c) || spacer {
-				words = append(words, string(word))
-				word = make([]rune, 0)
-			}
-		}
-		if !spacer {
-			if len(word) > 0 {
-				word = append(word, unicode.ToLower(c))
+			if !allowCaps || word.Len() > 0 {
+				word.WriteRune(lower) // write lower case in the middle of the string
+			} else if lower != c {
+				word.WriteRune(c) // on edges, if c was already uppercase; great.
 			} else {
-				word = append(word, unicode.ToUpper(c))
+				word.WriteRune(unicode.ToUpper(c)) // on edge, if c was lower, uppercase it.
 			}
 		}
 	}
-	words = append(words, string(word))
-	return words
-}
-
-func replaceLast(s, match, repl string) string {
-	// reverse strings
-	srev := reverse(s)
-	mrev := reverse(match)
-	rrev := reverse(repl)
-	// match first and reverse back
-	return reverse(strings.Replace(srev, mrev, rrev, 1))
+	// flow the last pending bit... always at least one rune long
+	if words.Len() > 0 {
+		words.WriteString(sep)
+	}
+	words.WriteString(word.String())
+	return words.String()
 }
 
 func abs(x int) int {
 	if x < 0 {
-		return -x
+		x = -x
 	}
 	return x
 }

@@ -1,4 +1,13 @@
-Copyright (c) 2011 Chris Farmiloe
+Copyright (c) 2011 Chris Farmiloe 
+	- original inflect library (bitbucket.org/pkg/inflect)
+
+Copyright (c) 2021 Simon Travis 
+	- modifications to make extending and rolling back rules easier.
+	- fix some bugs with inadvertent use of the package level interface.
+	- isolate tests with unique rulesets.
+	- simplify/optimize some of the internals.
+	- minor other internal changes for easier usability.
+	- go.mod
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

@@ -4,14 +4,6 @@ import (
 	"testing"
 )
 
-// assert helper
-
-func assertEqual(t *testing.T, a, b string) {
-	if a != b {
-		t.Errorf("inflect: expected %v got %v", a, b)
-	}
-}
-
 // test data
 
 var SingularToPlural = map[string]string{
@@ -316,241 +308,379 @@ var AcronymCases = []*AcronymCase{
 // tests
 
 func TestPluralizePlurals(t *testing.T) {
-	assertEqual(t, "plurals", Pluralize("plurals"))
-	assertEqual(t, "Plurals", Pluralize("Plurals"))
+	rs := AddDefaultRules(&Ruleset{})
+	if want, got := "plurals", rs.Pluralize("plurals"); got != want {
+		t.Error("want", want, "got", got)
+	}
+	if want, got := "Plurals", rs.Pluralize("Plurals"); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestPluralizeEmptyString(t *testing.T) {
-	assertEqual(t, "", Pluralize(""))
+	rs := AddDefaultRules(&Ruleset{})
+	if want, got := "", rs.Pluralize(""); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestUncountables(t *testing.T) {
-	for word := range Uncountables() {
-		assertEqual(t, word, Singularize(word))
-		assertEqual(t, word, Pluralize(word))
-		assertEqual(t, Pluralize(word), Singularize(word))
+	rs := AddDefaultRules(&Ruleset{})
+	for _, rule := range rs.uncountables {
+		word := rule.match
+		if got := rs.Singularize(word); got != word {
+			t.Error("want", word, "got", got)
+		}
+		if got := rs.Pluralize(word); got != word {
+			t.Error("want", word, "got", got)
+		}
 	}
 }
 
 func TestUncountableWordIsNotGreedy(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	uncountableWord := "ors"
 	countableWord := "sponsor"
 
-	AddUncountable(uncountableWord)
+	rs.AddUncountable(uncountableWord)
 
-	assertEqual(t, uncountableWord, Singularize(uncountableWord))
-	assertEqual(t, uncountableWord, Pluralize(uncountableWord))
-	assertEqual(t, Pluralize(uncountableWord), Singularize(uncountableWord))
-	assertEqual(t, "sponsor", Singularize(countableWord))
-	assertEqual(t, "sponsors", Pluralize(countableWord))
-	assertEqual(t, "sponsor", Singularize(Pluralize(countableWord)))
+	if want, got := uncountableWord, rs.Singularize(uncountableWord); got != want {
+		t.Error("want", want, "got", got)
+	}
+	if want, got := uncountableWord, rs.Pluralize(uncountableWord); got != want {
+		t.Error("want", want, "got", got)
+	}
+	if want, got := rs.Pluralize(uncountableWord), rs.Singularize(uncountableWord); got != want {
+		t.Error("want", want, "got", got)
+	}
+	if want, got := "sponsor", rs.Singularize(countableWord); got != want {
+		t.Error("want", want, "got", got)
+	}
+	if want, got := "sponsors", rs.Pluralize(countableWord); got != want {
+		t.Error("want", want, "got", got)
+	}
+	if want, got := "sponsor", rs.Singularize(rs.Pluralize(countableWord)); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestPluralizeSingular(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for singular, plural := range SingularToPlural {
-		assertEqual(t, plural, Pluralize(singular))
-		assertEqual(t, Capitalize(plural), Capitalize(Pluralize(singular)))
+		if want, got := plural, rs.Pluralize(singular); got != want {
+			t.Error("want", want, "got", got)
+		}
+		if want, got := rs.Capitalize(plural), rs.Capitalize(rs.Pluralize(singular)); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestSingularizePlural(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for singular, plural := range SingularToPlural {
-		assertEqual(t, singular, Singularize(plural))
-		assertEqual(t, Capitalize(singular), Capitalize(Singularize(plural)))
+		if want, got := singular, rs.Singularize(plural); got != want {
+			t.Error("want", want, "got", got)
+		}
+		if want, got := rs.Capitalize(singular), rs.Capitalize(rs.Singularize(plural)); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestPluralizePlural(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for _, plural := range SingularToPlural {
-		assertEqual(t, plural, Pluralize(plural))
-		assertEqual(t, Capitalize(plural), Capitalize(Pluralize(plural)))
+		if want, got := plural, rs.Pluralize(plural); got != want {
+			t.Error("want", want, "got", got)
+		}
+		if want, got := rs.Capitalize(plural), rs.Capitalize(rs.Pluralize(plural)); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestOverwritePreviousInflectors(t *testing.T) {
-	assertEqual(t, "series", Singularize("series"))
-	AddSingular("series", "serie")
-	assertEqual(t, "serie", Singularize("series"))
-	AddUncountable("series") // reset
+	rs := AddDefaultRules(&Ruleset{})
+	if want, got := "series", rs.Singularize("series"); got != want {
+		t.Error("want", want, "got", got)
+	}
+	// previously exact wasnt needed because add would *remove* from uncountables
+	// but since we want to be able to easily "rollback" additions to rules
+	// the algorithm has changed slightly
+	rs.AddSingularExact("series", "replaced", true)
+	if want, got := "replaced", rs.Singularize("series"); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestTitleize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for before, titleized := range MixtureToTitleCase {
-		assertEqual(t, titleized, Titleize(before))
+		if want, got := titleized, rs.Titleize(before); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestCapitalize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for lower, capitalized := range CapitalizeMixture {
-		assertEqual(t, capitalized, Capitalize(lower))
+		if want, got := capitalized, rs.Capitalize(lower); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestCamelize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for camel, underscore := range CamelToUnderscore {
-		assertEqual(t, camel, Camelize(underscore))
+		if want, got := camel, rs.Camelize(underscore); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestCamelizeWithLowerDowncasesTheFirstLetter(t *testing.T) {
-	assertEqual(t, "capital", CamelizeDownFirst("Capital"))
+	rs := AddDefaultRules(&Ruleset{})
+	if want, got := "capital", rs.CamelizeDownFirst("Capital"); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestCamelizeWithUnderscores(t *testing.T) {
-	assertEqual(t, "CamelCase", Camelize("Camel_Case"))
+	rs := AddDefaultRules(&Ruleset{})
+	if want, got := "CamelCase", rs.Camelize("Camel_Case"); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 // func TestAcronyms(t *testing.T) {
-//     AddAcronym("API")
-//     AddAcronym("HTML")
-//     AddAcronym("HTTP")
-//     AddAcronym("RESTful")
-//     AddAcronym("W3C")
-//     AddAcronym("PhD")
-//     AddAcronym("RoR")
-//     AddAcronym("SSL")
-//     // each in table
-//     for _,x := range AcronymCases {
-//         assertEqual(t, x.camel, Camelize(x.under))
-//         assertEqual(t, x.camel, Camelize(x.camel))
-//         assertEqual(t, x.under, Underscore(x.under))
-//         assertEqual(t, x.under, Underscore(x.camel))
-//         assertEqual(t, x.title, Titleize(x.under))
-//         assertEqual(t, x.title, Titleize(x.camel))
-//         assertEqual(t, x.human, Humanize(x.under))
-//     }
+// 	rs := AddDefaultRules(&Ruleset{})
+// 	rs.AddAcronym("API")
+// 	rs.AddAcronym("HTML")
+// 	rs.AddAcronym("HTTP")
+// 	rs.AddAcronym("RESTful")
+// 	rs.AddAcronym("W3C")
+// 	rs.AddAcronym("PhD")
+// 	rs.AddAcronym("RoR")
+// 	rs.AddAcronym("SSL")
+// 	// each in table
+// 	for _, x := range AcronymCases {
+// 		if want, got := x.camel, rs.Camelize(x.under); got != want {
+// 			t.Error("want", want, "got", got)
+// 		}
+// 		if want, got := x.camel, rs.Camelize(x.camel); got != want {
+// 			t.Error("want", want, "got", got)
+// 		}
+// 		if want, got := x.under, rs.Underscore(x.under); got != want {
+// 			t.Error("want", want, "got", got)
+// 		}
+// 		if want, got := x.under, rs.Underscore(x.camel); got != want {
+// 			t.Error("want", want, "got", got)
+// 		}
+// 		if want, got := x.title, rs.Titleize(x.under); got != want {
+// 			t.Error("want", want, "got", got)
+// 		}
+// 		if want, got := x.title, rs.Titleize(x.camel); got != want {
+// 			t.Error("want", want, "got", got)
+// 		}
+// 		if want, got := x.human, Humanize(x.under); got != want {
+// 			t.Error("want", want, "got", got)
+// 		}
+// 	}
 // }
 
 // func TestAcronymOverride(t *testing.T) {
-//     AddAcronym("API")
-//     AddAcronym("LegacyApi")
-//     assertEqual(t, "LegacyApi", Camelize("legacyapi"))
-//     assertEqual(t, "LegacyAPI", Camelize("legacy_api"))
-//     assertEqual(t, "SomeLegacyApi", Camelize("some_legacyapi"))
-//     assertEqual(t, "Nonlegacyapi", Camelize("nonlegacyapi"))
+// rs := AddDefaultRules(&Ruleset{})
+//     rs.AddAcronym("API")
+//     rs.AddAcronym("LegacyApi")
+//     if want, got := "LegacyApi", rs.Camelize("legacyapi"))
+//     if want, got := "LegacyAPI", rs.Camelize("legacy_api"))
+//     if want, got := "SomeLegacyApi", rs.Camelize("some_legacyapi"))
+//     if want, got := "Nonlegacyapi", rs.Camelize("nonlegacyapi"))
 // }
 
 // func TestAcronymsCamelizeLower(t *testing.T) {
-//     AddAcronym("API")
-//     AddAcronym("HTML")
-//     assertEqual(t, "htmlAPI", CamelizeDownFirst("html_api"))
-//     assertEqual(t, "htmlAPI", CamelizeDownFirst("htmlAPI"))
-//     assertEqual(t, "htmlAPI", CamelizeDownFirst("HTMLAPI"))
+// rs := AddDefaultRules(&Ruleset{})
+//     rs.AddAcronym("API")
+//     rs.AddAcronym("HTML")
+//     if want, got := "htmlAPI", CamelizeDownFirst("html_api"))
+//     if want, got := "htmlAPI", CamelizeDownFirst("htmlAPI"))
+//     if want, got := "htmlAPI", CamelizeDownFirst("HTMLAPI"))
 // }
 
 func TestUnderscoreAcronymSequence(t *testing.T) {
-	AddAcronym("API")
-	AddAcronym("HTML5")
-	AddAcronym("HTML")
-	assertEqual(t, "html5_html_api", Underscore("HTML5HTMLAPI"))
+	rs := AddDefaultRules(&Ruleset{})
+	rs.AddAcronym("API")
+	rs.AddAcronym("HTML5")
+	rs.AddAcronym("HTML")
+	if want, got := "html5_html_api", rs.Underscore("HTML5HTMLAPI"); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestUnderscore(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
+	rs.AddAcronym("HTML")
 	for camel, underscore := range CamelToUnderscore {
-		assertEqual(t, underscore, Underscore(camel))
+		if want, got := underscore, rs.Underscore(camel); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 	for camel, underscore := range CamelToUnderscoreWithoutReverse {
-		assertEqual(t, underscore, Underscore(camel))
+		if want, got := underscore, rs.Underscore(camel); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestForeignKey(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for klass, foreignKey := range ClassNameToForeignKeyWithUnderscore {
-		assertEqual(t, foreignKey, ForeignKey(klass))
+		if want, got := foreignKey, rs.ForeignKey(klass); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 	for word, foreignKey := range PluralToForeignKeyWithUnderscore {
-		assertEqual(t, foreignKey, ForeignKey(word))
+		if want, got := foreignKey, rs.ForeignKey(word); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 	for klass, foreignKey := range ClassNameToForeignKeyWithoutUnderscore {
-		assertEqual(t, foreignKey, ForeignKeyCondensed(klass))
+		if want, got := foreignKey, rs.ForeignKeyCondensed(klass); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestTableize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for klass, table := range ClassNameToTableName {
-		assertEqual(t, table, Tableize(klass))
+		if want, got := table, rs.Tableize(klass); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestParameterize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for str, parameterized := range StringToParameterized {
-		assertEqual(t, parameterized, Parameterize(str))
+		if want, got := parameterized, rs.Parameterize(str); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestParameterizeAndNormalize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for str, parameterized := range StringToParameterizedAndNormalized {
-		assertEqual(t, parameterized, Parameterize(str))
+		if want, got := parameterized, rs.Parameterize(str); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestParameterizeWithCustomSeparator(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for str, parameterized := range StringToParameterizeWithUnderscore {
-		assertEqual(t, parameterized, ParameterizeJoin(str, "_"))
+		if want, got := parameterized, rs.ParameterizeJoin(str, "_"); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestTypeify(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for klass, table := range ClassNameToTableName {
-		assertEqual(t, klass, Typeify(table))
-		assertEqual(t, klass, Typeify("table_prefix."+table))
+		if want, got := klass, rs.Typeify(table); got != want {
+			t.Error("want", want, "got", got)
+		}
+		if want, got := klass, rs.Typeify("table_prefix."+table); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestTypeifyWithLeadingSchemaName(t *testing.T) {
-	assertEqual(t, "FooBar", Typeify("schema.foo_bar"))
+	rs := AddDefaultRules(&Ruleset{})
+	if want, got := "FooBar", rs.Typeify("schema.foo_bar"); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestHumanize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for underscore, human := range UnderscoreToHuman {
-		assertEqual(t, human, Humanize(underscore))
+		if want, got := human, rs.Humanize(underscore); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestHumanizeByString(t *testing.T) {
-	AddHuman("col_rpted_bugs", "reported bugs")
-	assertEqual(t, "90 reported bugs recently", Humanize("90 col_rpted_bugs recently"))
+	rs := AddDefaultRules(&Ruleset{})
+	rs.AddHuman("col_rpted_bugs", "reported bugs")
+	if want, got := "90 reported bugs recently", rs.Humanize("90 col_rpted_bugs recently"); got != want {
+		t.Error("want", want, "got", got)
+	}
 }
 
 func TestOrdinal(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for number, ordinalized := range OrdinalNumbers {
-		assertEqual(t, ordinalized, Ordinalize(number))
+		if want, got := ordinalized, rs.Ordinalize(number); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestDasherize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for underscored, dasherized := range UnderscoresToDashes {
-		assertEqual(t, dasherized, Dasherize(underscored))
+		if want, got := dasherized, rs.Dasherize(underscored); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestUnderscoreAsReverseOfDasherize(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for underscored := range UnderscoresToDashes {
-		assertEqual(t, underscored, Underscore(Dasherize(underscored)))
+		if want, got := underscored, rs.Underscore(rs.Dasherize(underscored)); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestUnderscoreToLowerCamel(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for underscored, lower := range UnderscoreToLowerCamel {
-		assertEqual(t, lower, CamelizeDownFirst(underscored))
+		if want, got := lower, rs.CamelizeDownFirst(underscored); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
-func Test_clear_all(t *testing.T) {
-	// test a way of resetting inflexions
-}
-
 func TestIrregularityBetweenSingularAndPlural(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for singular, plural := range Irregularities {
-		AddIrregular(singular, plural)
-		assertEqual(t, singular, Singularize(plural))
-		assertEqual(t, plural, Pluralize(singular))
+		rs.AddIrregular(singular, plural)
+		if want, got := singular, rs.Singularize(plural); got != want {
+			t.Error("want", want, "got", got)
+		}
+		if want, got := plural, rs.Pluralize(singular); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
 
 func TestPluralizeOfIrregularity(t *testing.T) {
+	rs := AddDefaultRules(&Ruleset{})
 	for singular, plural := range Irregularities {
-		AddIrregular(singular, plural)
-		assertEqual(t, plural, Pluralize(plural))
+		rs.AddIrregular(singular, plural)
+		if want, got := plural, rs.Pluralize(plural); got != want {
+			t.Error("want", want, "got", got)
+		}
 	}
 }
